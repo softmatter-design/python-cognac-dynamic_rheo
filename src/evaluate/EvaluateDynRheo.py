@@ -12,6 +12,7 @@ import os
 import gnuplot2
 from time import sleep
 
+import evaluate.values as val
 #========== parameters ======================================================
 # number of cycles to be omitted from the analysis
 skip_cycles = 10
