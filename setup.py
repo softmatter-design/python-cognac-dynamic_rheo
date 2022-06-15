@@ -3,8 +3,8 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='chain_evaluate',
-    version='0.2.2',
+    name='dynamic-rheo',
+    version='0.0.1',
     license='proprietary',
     description='Module Experiment',
 
@@ -17,7 +17,7 @@ setup(
 
     entry_points={
         "console_scripts": [
-          'evaluate_nw = evaluate_all:main'
+          'dr_setup = evaluate_all:main'
         ]
     }
 )
