@@ -57,6 +57,8 @@ from UDFManager import *
 import sys
 import os
 import shutil
+
+import dynamic_rheo_setup.values as val
 ################################################################################
 ## MAIN
 ################################################################################
