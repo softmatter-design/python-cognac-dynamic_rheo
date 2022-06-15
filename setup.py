@@ -17,7 +17,8 @@ setup(
 
     entry_points={
         "console_scripts": [
-          'dr_setup = evaluate_all:main'
+          'dr_setup = dynamic_rheo_setup.dr_setup:main',
+          'evaluate_dr = evaluate.evaluate_dr:main'
         ]
     }
 )

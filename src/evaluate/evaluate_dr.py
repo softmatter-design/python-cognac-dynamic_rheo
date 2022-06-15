@@ -1,10 +1,10 @@
 #!/usr/bin/env python 
 # -*- coding: utf-8 -*-
 ################################
-import chain_evaluation
+import evaluate
 ################################
 def main():
-    chain_evaluation.evaluate_nw()
+    evaluate.evaluate_all()
     return
 
 if __name__ == '__main__':

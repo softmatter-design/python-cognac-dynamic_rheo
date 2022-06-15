@@ -14,19 +14,22 @@ from time import sleep
 
 #========== parameters ======================================================
 # number of cycles to be omitted from the analysis
-skip_cycles = 4
+skip_cycles = 10
 # make this smaller for higher accuracy
-epsilon = 0.01
+epsilon = 0.001
 # maximum number of iteration
 max_iter = 1000000
 
-#========== functions =======================================================
+#####################
+#
+def evaluate_all():
+	print('kk')
+	return
 
-#---------- private functions ----------
 
 #---- initialize
 
-def _initialize(udf,verbose=0):
+def _initialize(udf, verbose=0):
 	global uobj, num_data, dt,interval, amp, freq, N, num_cycles, dphi
 	uobj = udf
 	# read simulation conditions
@@ -146,8 +149,9 @@ def _find_delta(verbose=0):
 
 #----- the main function: do everything
 
-def do_fit(udf,verbose=1):
-	if _initialize(udf,verbose) != 0:
+def do_fit(udf_file, verbose=1):
+	udf = UDFManager(udf_file)
+	if _initialize(udf, verbose) != 0:
 		return -2
 	if _read_stress() != 0:
 		return -3
@@ -158,32 +162,75 @@ def do_fit(udf,verbose=1):
 
 #----- output the results
 
-def output_table():
-	print("Analysis of dynamic viscoelastisity")
-	print("gamma_0\t",amp)
-	print("frequency\t",freq)
-	print("delta\t",delta)
-	print("sigma_0\t",sigma_0)
-	print("omega\t",2*pi*freq)
-	print("G'\t",sigma_0/amp*cos(delta))
-	print("G''\t",sigma_0/amp*sin(delta))
-	print("strain\ts_batch_xy\tfitting")
+# def output_table():
+# 	print("Analysis of dynamic viscoelastisity")
+# 	print("gamma_0\t",amp)
+# 	print("frequency\t",freq)
+# 	print("delta\t",delta)
+# 	print("sigma_0\t",sigma_0)
+# 	print("omega\t",2*pi*freq)
+# 	print("G'\t",sigma_0/amp*cos(delta))
+# 	print("G''\t",sigma_0/amp*sin(delta))
+# 	print("strain\ts_batch_xy\tfitting")
 
-	for i in range(N):
-		print(strain[i],"\t",sxy[i],"\t",fit[i])
+# 	for i in range(N):
+# 		print(strain[i],"\t",sxy[i],"\t",fit[i])
 
 
 def output_summary():
 	print(os.path.basename(uobj.udfFile()), "\t",amp,"\t",freq,"\t",\
 		err,"\t",delta,"\t",sigma_0,"\t",2*pi*freq,"\t",\
-		sigma_0/amp*cos(delta),"\t",sigma_0/amp*sin(delta), tan(delta))
+		sigma_0/amp*cos(delta), "\t", sigma_0/amp*sin(delta), "\t", tan(delta))
 
-#----- set parameters
-
-def set_param(skip=1,eps=0.01,maxiter=1000000):
-	skip_cycles = skip
-	epsilon = eps
-	max_iter = maxiter
+def save_data(udf_file):
+	#
+	if udf_file.split("_")[0] == "Freq":
+		title = "Freq_" + ("{0:6.1e}".format(freq)).replace('.', '_')
+	elif udf_file.split("_")[0] == "Str":
+		title = "Str_" + ("{0:6.1e}".format(amp)).replace('.', '_')
+	else:
+		print("wrong")
+		exit(1)
+	sim_dat = title + "_sim.dat"
+	rheo_dat = "Rheo.dat"
+	#
+	if os.path.isfile("summary.dat"):
+		with open("summary.dat", 'a') as f:
+			f.write(str(os.path.basename(uobj.udfFile())) + "\t" + str(amp) + "\t" + str(freq) 
+			+ "\t" + str(err) + "\t" + str(delta) + "\t" + str(sigma_0) + "\t" + str(2*pi*freq)
+			+ "\t" + str(sigma_0/amp*cos(delta)) + "\t" + str(sigma_0/amp*sin(delta)) + "\t" 
+			+ str(tan(delta)) + "\n")
+	else:
+		with open("summary.dat", 'w') as f:
+			f.write("# file_name\tstrain_amplitude\tfrequency\tfitting_error\tdelta\tsigma_0\tomega\tG'\tG''\ttan_d\n\n")
+			f.write(str(os.path.basename(uobj.udfFile())) + "\t" + str(amp) + "\t" + str(freq) 
+			+ "\t" + str(err) + "\t" + str(delta) + "\t" + str(sigma_0) + "\t" + str(2*pi*freq)
+			+ "\t" + str(sigma_0/amp*cos(delta)) + "\t" + str(sigma_0/amp*sin(delta)) + "\t" 
+			+ str(tan(delta)) + "\n")
+	#
+	if os.path.isfile(rheo_dat):
+		with open(rheo_dat, 'a') as f:
+			f.write(str(round(amp, 4)) + "\t" + str(round(freq, 6)) + "\t" + str(round(sigma_0/amp*cos(delta), 6)) 
+			+ "\t" + str(round(sigma_0/amp*sin(delta), 6)) + "\t" + str(round(tan(delta), 6)) + "\n")
+	else:
+		with open(rheo_dat, 'w') as f:
+			f.write("# strain\tfrequency\tG'\tG''\ttan_d\n\n")
+			f.write(str(round(amp, 4)) + "\t" + str(round(freq, 6)) + "\t" + str(round(sigma_0/amp*cos(delta), 6)) 
+			+ "\t" + str(round(sigma_0/amp*sin(delta), 6)) + "\t" + str(round(tan(delta), 6)) + "\n")
+	#
+	with open(sim_dat, 'w') as f:
+		f.write("# Strain\tStress\tfit\n\n")
+		#
+		fit2 = fit.tolist()*num_cycles
+		for i, tt in enumerate(time):
+			f.write(str(tt) + "\t" + str(strain[i]) + "\t" + str(stress[i]) + "\t" 
+			+ str(fit2[i]) + "\n")
+		#
+		fit3 = fit.tolist()
+		fit3.append(fit[0])
+		f.write("\n\n\n# Data for lissajous\n# Strain\tfit\n\n")
+		for i in range(N+1):
+			f.write(str(strain[i]) + "\t" + str(fit3[i]) + "\n")
 
 #----- plot
 
@@ -220,13 +267,16 @@ if __name__ == '__main__':
 	from sys import *
 
 	if len(argv) == 1:
-		print("usage: python",argv[0],"XXX_osc_nn_out.udf >> XXX.txt")
+		print("usage: python", argv[0],"XXX_osc_nn_out.udf >> XXX.txt")
 		exit(1)
-
-	if not os.access(argv[1],os.R_OK):
+	elif not os.access(argv[1], os.R_OK):
 		print(argv[1],"not exists.")
 		exit(1)
-
-	udf = UDFManager(argv[1])
-	if do_fit(udf,0) == 0:
+	#
+	udf_file = argv[1]
+	if do_fit(udf_file, 0) == 0:
 		output_summary()
+		plot_stress()
+		plot_lissajous()
+		save_data(udf_file)
+		
