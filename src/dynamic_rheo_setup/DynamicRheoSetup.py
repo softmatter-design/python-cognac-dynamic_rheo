@@ -63,10 +63,8 @@ import dynamic_rheo_setup.values as val
 ## MAIN
 ################################################################################
 def setup():
-	print('OK')
-	# 対象となるファイルの選択
-	# target_udf = file_select()
-	# base_udf = "Base.udf"
+	# 各種条件を読み取り
+	read_all()
 	# # セットアップ
 	# summary_fname, job_dir = Setup(target_udf, base_udf, Setting)
 	# #
@@ -78,17 +76,233 @@ def setup():
 ################################################################################
 # Functions
 ################################################################################
-#----- ファイルを選択
-def file_select():
-	param = sys.argv
-	if len(param) == 1:
-		# print("to generate input files from XXX_eq_in.udf and XXX_eq_out.udf ...")
-		print("usage: python",param[0],"Honya_out.udf")
-		sys.exit(1)
-	if not os.access(param[1],os.R_OK):
-		print(param[1],"not exists.")
-		sys.exit(1)
-	return param[1]
+###################################
+# 各種条件を読み取り
+def read_all():
+	read_arg()
+	read_nw_cond()
+	read_sim_cond()
+	return
+
+def read_arg():
+	parser = argparse.ArgumentParser(description='Select udf file to read !')
+	parser.add_argument('udf', help="udf file name to read previous simulation")
+	args = parser.parse_args()
+	if args.udf:
+		if len(args.udf.split('.')) != 2 or args.udf.split('.')[1] != 'udf':
+			print('\nthe file name you selected is not udf file !')
+			sys.exit('select proper udf file to read.')
+		elif not os.access(args.udf, os.R_OK):
+			sys.exit('\nSelected udf of ', args.udf, ' seems not exist !\nbye now!!')
+		else:
+			val.read_udf = args.udf
+			# print('Selected udf file is ' + val.read_udf)
+	else:
+		print('no udf file is selected')
+		sys.exit('select proper udf file to read.')
+	return
+
+# 計算対象の条件を読み取る
+def read_nw_cond():
+	if not os.access('target_condition.udf', os.R_OK):
+		sys.exit("\n'target_condition.udf' is not exists.")
+	else:
+		cond_u = UDFManager('target_condition.udf')
+		val.func = cond_u.get('TargetCond.NetWork.N_Strands')
+		val.nu = cond_u.get('TargetCond.System.Nu')
+	return
+
+# シミュレーション条件を設定する。
+def read_sim_cond():
+	if not os.path.isfile('../dynamic_rheo.udf'):
+		print('\nIn the parent directory, no "dynamic_rheo.udf" is found !')
+		print('New one will be generated.')
+		print('Please, modify and save it !\n')
+		make_newudf()
+		input('Press ENTER to continue...')
+	else:
+		read_and_set()
+	return
+
+# make new udf when not found.
+def make_newudf():
+	contents = '''
+	\\begin{def}
+	CalcConditions:{
+		Cognac_ver:select{"cognac112"} "使用する Cognac のバージョン",
+		Cores: int "計算に使用するコア数を指定"
+		} "Cognac による計算の条件を設定"
+	Dynamics:{
+		DeformationMode:select{"Stretch", "Shear"} "変形モードを選択",
+		SweepMode:select{"StrainSweep", "FrequencySweep"} "Sweep モードを選択",
+			StrainSweep[]:{
+				Temperature:float "",
+				BaseStrain:float "基準となる歪み",
+				Frequency:float "最大ひずみ",
+				DataperDigit:float "これは１ステップ計算での伸長度　Res = lambda/1_step"
+				}
+			FrequencySweep:{
+				DeformRate[]:float "これらは変形レートのリスト",
+				MaxDeformation:float "最大ひずみ",
+				Resolution:float "これは１ステップ計算での伸長度　Res = lambda/1_step"
+				}
+		} "計算ターゲットの条件を設定"		
+	CycleDeformation:{
+		CyclicDeform:select{"none", "CyclicStretch", "CyclicShear"} "変形モードを選択",
+		CyclicStretch:{
+			StretchConditions[]:{
+				MaxDeformation:float "最大ひずみ",
+				Repeat:int "サイクルの繰り返し数",
+				DeformRate[]:float "これらは変形レートのリスト",
+				Resolution:float "これは１ステップ計算での伸長度　Res = lambda/1_step"
+				}
+			}
+		CyclicShear:{
+			ShearConditions[]:{
+				MaxDeformation:float "最大ひずみ",
+				Repeat:int "サイクルの繰り返し数",
+				DeformRate[]:float "これらは変形レートのリスト",
+				Resolution:float "これは１ステップ計算での伸長度　Res = lambda/1_step"
+				}
+			}
+		} "計算ターゲットの条件を設定"
+	\end{def}	
+
+	\\begin{data}
+	
+	\end{data}
+	'''
+	###
+	with codecs.open('../dynamic_rheo.udf', 'w', 'utf_8') as f:
+		f.write(contents)
+	return
+
+# Read udf and setup initial conditions
+def read_and_set():
+	dic={'y':True,'yes':True,'q':False,'quit':False}
+	while True:
+		# read udf
+		read_condition()
+		# select
+		init_calc()
+		print('Change UDF: type [r]eload')
+		print('Quit input process: type [q]uit')
+		inp = input('Condition is OK ==> [y]es >> ').lower()
+		if inp in dic:
+			inp = dic[inp]
+			break
+		print('##### \nRead Condition UDF again \n#####\n\n')
+	if inp:
+		return
+	else:
+		sys.exit("##### \nQuit !!")
+
+# Read condition udf
+def read_condition():
+	u = UDFManager('../dynamic_rheo.udf')
+	u.jump(-1)
+	# 使用するCognacのバージョン
+	val.ver_Cognac = u.get('CalcConditions.Cognac_ver')
+	# 計算に使用するコア数
+	val.core = u.get('CalcConditions.Cores')
+	# Simple Deformation
+	val.simple_def_mode  = u.get('SimpleDeformation.DeformMode')
+	if val.simple_def_mode == 'Stretch':
+		val.sim_rate_list = u.get('SimpleDeformation.Stretch.DeformRate[]')
+		val.sim_deform_max = u.get('SimpleDeformation.Stretch.MaxDeformation')
+		val.sim_resolution = u.get('SimpleDeformation.Stretch.Resolution')
+		val.sim_deform = val.simple_def_mode
+	elif val.simple_def_mode == 'Shear':
+		val.sim_rate_list = u.get('SimpleDeformation.Shear.DeformRate[]')
+		val.sim_deform_max = u.get('SimpleDeformation.Shear.MaxDeformation')
+		val.sim_resolution = u.get('SimpleDeformation.Shear.Resolution')
+		val.sim_deform = val.simple_def_mode
+	elif val.simple_def_mode == 'both':
+		val.sim_rate_list = u.get('SimpleDeformation.both.DeformRate[]')
+		val.sim_deform_max = u.get('SimpleDeformation.both.MaxDeformation')
+		val.sim_resolution = u.get('SimpleDeformation.both.Resolution')
+	# Cyclic Deformation
+	tmp = []
+	val.cyc_deform_max = []
+	val.cyc_repeat = []
+	val.cyc_ratelist = []
+	val.cyc_resolution = []
+	val.cyclic_deform = u.get('CycleDeformation.CyclicDeform')
+	if val.cyclic_deform == 'CyclicStretch':
+		tmp = u.get('CycleDeformation.CyclicStretch.StretchConditions[]')
+	elif val.cyclic_deform == 'CyclicShear':
+		tmp = u.get('CycleDeformation.CyclicShear.ShearConditions[]')
+	for data in tmp:
+		val.cyc_deform_max.append(data[0])
+		val.cyc_repeat.append(data[1])
+		val.cyc_ratelist.append(data[2])
+		val.cyc_resolution.append(data[3])
+	if val.simple_def_mode == 'none' and val.cyclic_deform == 'none':
+		sys.exit('No proper condition is selected.\nBye!')
+	return
+# 
+def init_calc():
+	text = "################################################" + "\n"
+	text += "Cores used for simulation\t\t" + str(val.core ) + "\n"
+	text += "################################################" + "\n"
+	if val.simple_def_mode != 'none':
+		text += "Deform mode:\t\t\t\t" + str(val.simple_def_mode) + "\n"
+		text += "Deform Rate:\t\t" + ', '.join(["{0:4.0e}".format(x) for x in val.sim_rate_list]) + "\n"
+		text += "Maximum Strain:\t\t\t\t" + str(val.sim_deform_max) + "\n"
+		text += "Resolution:\t\t\t\t" + str(round(val.sim_resolution,4)) + "\n"
+		text += "################################################" + "\n"
+	if val.cyclic_deform != 'none':
+		text += "Deform mode:\t\t\t" + str(val.cyclic_deform) + "\n"
+		for i in range(len(val.cyc_deform_max)):
+			text += 'Cyclic condition #' + str(i) + '\n'
+			text += "\tMaximum Strain:\t\t\t" + str(val.cyc_deform_max[i]) + "\n"
+			text += "\tRepeat:\t\t\t\t" + str(val.cyc_repeat[i]) + "\n"
+			text += "\tCyclic Deform Rate:\t" + ', '.join(["{0:4.0e}".format(x) for x in val.cyc_ratelist[i]]) + "\n"
+			text += "\tResolution:\t\t\t" + str(round(val.cyc_resolution[i], 4)) + "\n"
+		text += "################################################" + "\n"
+	print(text)
+	return
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 def Setup(target_udf, base_udf, Setting):
 	#
