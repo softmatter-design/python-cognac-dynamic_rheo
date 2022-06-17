@@ -1,58 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-################################################################################
-#	動的粘弾性シミュレータ
-#                     2007/2/20   H. Kodama, H. Sasaki
-#                     2007/9/01   J. Takimoto
-#                     2018/4/18   H. Sasaki
-################################################################################
-# #========== Change Here ===========
-# # 計算に使用するコア数
-# core = 7
-# #
-# # 計算条件
-# Method = "Freq_Sweep"
-# # Method = "Str_Sweep"
-# #
-# # 基準周波数
-# Freq_Base = 0.01
-# #
-# # 基準ひずみ
-# Str_Base = 0.1
-# #
-# # スイープレンジ
-# Range = [1, 0.1]
-# #
-# # 解像度
-# # Resol = [1.0, 0.79, 0.63, 0.5, 0.4, 0.32, 0.25, 0.2, 0.16, 0.13]
-# # Resol = [1.0, 0.63, 0.4, 0.25, 0.16]
-# Resol = [1., 0.56, 0.32, 0.18]
-# # Resol = [1., 0.5, 0.2]
-# #
-# # シミュレーション時の最大 time step
-# dt_max = 0.01
-# #
-# Setting = {"core":core, "Method":Method, "Freq_Base":Freq_Base,
-# "Str_Base":Str_Base, "Range":Range, "Resol":Resol, "dt_max": dt_max}
-# ################################################################################
-# #========== parameters ==========
-# # １サイクル当たりのステップ数の最小値
-# # (maximum value of freq*dt) = 1.0/Step_min
-# Step_min = 200
-# # １サイクル当たりの出力回数（Step_minを割り切れる数字）
-# output_per_cycle = 40
-# # シミュレーションを行うサイクル数
-# num_cycles = 30
-# # name of analysis script
-# py_fname = "Analysis_V2.py"
-# # cognac version
-# cognac_v = "cognac10"
-# #
-# Parameters = {"Step_min": Step_min, "output_per_cycle": output_per_cycle,
-# "num_cycles": num_cycles, "py_fname": py_fname, "cognac_v": cognac_v}
-# #========== end of parameters ==========
-
 ###### Modules #################################################################
+from unittest import TestProgram
 from UDFManager import *
 
 import argparse
@@ -68,7 +17,8 @@ import dynamic_rheo_setup.values as val
 def setup():
 	# 各種条件を読み取り
 	read_all()
-	# # セットアップ
+	# セットアップ
+	setup_base()
 	# summary_fname, job_dir = Setup(target_udf, base_udf, Setting)
 	# #
 	# Make_Series_Calc(Setting, Parameters, summary_fname, base_udf, job_dir)
@@ -83,7 +33,6 @@ def setup():
 # 各種条件を読み取り
 def read_all():
 	read_arg()
-	read_nw_cond()
 	read_sim_cond()
 	return
 
@@ -105,16 +54,6 @@ def read_arg():
 		sys.exit('select proper udf file to read.')
 	return
 
-# 計算対象の条件を読み取る
-def read_nw_cond():
-	if not os.access('target_condition.udf', os.R_OK):
-		sys.exit("\n'target_condition.udf' is not exists.")
-	else:
-		cond_u = UDFManager('target_condition.udf')
-		val.func = cond_u.get('TargetCond.NetWork.N_Strands')
-		val.nu = cond_u.get('TargetCond.System.Nu')
-	return
-
 # シミュレーション条件を設定する。
 def read_sim_cond():
 	if not os.path.isfile('../dynamic_rheo.udf'):
@@ -131,48 +70,57 @@ def read_sim_cond():
 def make_newudf():
 	contents = '''
 	\\begin{def}
-	CalcConditions:{
-		Cognac_ver:select{"cognac112"} "使用する Cognac のバージョン",
-		Cores: int "計算に使用するコア数を指定"
-		} "Cognac による計算の条件を設定"
-	Dynamics:{
-		DeformationMode:select{"Stretch", "Shear"} "変形モードを選択",
-		SweepMode:select{"StrainSweep", "FrequencySweep"} "Sweep モードを選択",
-			StrainSweep[]:{
-				Temperature:float "",
-				BaseStrain:float "基準となる歪み",
-				Frequency:float "最大ひずみ",
-				DataperDigit:float "これは１ステップ計算での伸長度　Res = lambda/1_step"
-				}
-			FrequencySweep:{
-				DeformRate[]:float "これらは変形レートのリスト",
-				MaxDeformation:float "最大ひずみ",
-				Resolution:float "これは１ステップ計算での伸長度　Res = lambda/1_step"
-				}
-		} "計算ターゲットの条件を設定"		
-	CycleDeformation:{
-		CyclicDeform:select{"none", "CyclicStretch", "CyclicShear"} "変形モードを選択",
-		CyclicStretch:{
-			StretchConditions[]:{
-				MaxDeformation:float "最大ひずみ",
-				Repeat:int "サイクルの繰り返し数",
-				DeformRate[]:float "これらは変形レートのリスト",
-				Resolution:float "これは１ステップ計算での伸長度　Res = lambda/1_step"
-				}
+		CalcConditions:{
+			Cognac_ver:select{"cognac112"} "使用する Cognac のバージョン",
+			Cores: int "計算に使用するコア数を指定"
+			} "Cognac による計算の条件を設定"
+		DeformationMode:{
+			Deformation:select{"Stretch", "Shear"} "変形モードを選択"
 			}
-		CyclicShear:{
-			ShearConditions[]:{
-				MaxDeformation:float "最大ひずみ",
-				Repeat:int "サイクルの繰り返し数",
-				DeformRate[]:float "これらは変形レートのリスト",
-				Resolution:float "これは１ステップ計算での伸長度　Res = lambda/1_step"
-				}
-			}
-		} "計算ターゲットの条件を設定"
+		Dynamics:{
+			SweepMode:select{"none", "StrainSweep", "FrequencySweep"} "Sweep モードを選択",
+				StrainSweep:{
+					StrainSweepConditions[]:{
+						Temperature:float "",
+						MinStrain:float "最小ひずみ",
+						MaxStrain:float "最大ひずみ",
+						Frequency:float "測定周波数",
+						Data_per_Digit:int "対数スケールで、一桁あたりの測定数"
+						}
+					}
+				FrequencySweep:{
+					FrequencySweepConditions[]:{
+						Temperature:float "",
+						MinFrequency:float "最小周波数",
+						MaxFrequency:float "最大周波数",
+						Strain:float "ひずみ",
+						Data_per_Digit:int "対数スケールで、一桁あたりの測定数"
+						}
+					}
+			} "計算ターゲットの条件を設定"		
+		SimulationParameters:{
+			Cycles:int "",
+			Output_per_Cycle:int "",
+			} "シミュレーション条件を設定"
+		AnalysisParameters:{
+			SkipCycles:int "",
+			} "分析条件を設定"
 	\end{def}	
 
 	\\begin{data}
-	
+		CalcConditions:{"cognac112",1}
+		DeformationMode:{"Shear"}
+		Dynamics:{
+		"FrequencySweep",
+		{
+		[{1.0000000,1.e-2,10.000000,1.0000000,5}{1.5000000,1.e-2,10.000000,1.0000000,5}]
+		}
+		{
+		[{1.0000000,1.e-2,1.0000000,1.e-2,5}{1.5000000,1.e-2,1.0000000,1.e-2,5}]
+		}
+		}
+		SymulationParameters:{20,20}
+		AnalysisParameters:{10}
 	\end{data}
 	'''
 	###
@@ -208,61 +156,50 @@ def read_condition():
 	val.ver_Cognac = u.get('CalcConditions.Cognac_ver')
 	# 計算に使用するコア数
 	val.core = u.get('CalcConditions.Cores')
-	# Simple Deformation
-	val.simple_def_mode  = u.get('SimpleDeformation.DeformMode')
-	if val.simple_def_mode == 'Stretch':
-		val.sim_rate_list = u.get('SimpleDeformation.Stretch.DeformRate[]')
-		val.sim_deform_max = u.get('SimpleDeformation.Stretch.MaxDeformation')
-		val.sim_resolution = u.get('SimpleDeformation.Stretch.Resolution')
-		val.sim_deform = val.simple_def_mode
-	elif val.simple_def_mode == 'Shear':
-		val.sim_rate_list = u.get('SimpleDeformation.Shear.DeformRate[]')
-		val.sim_deform_max = u.get('SimpleDeformation.Shear.MaxDeformation')
-		val.sim_resolution = u.get('SimpleDeformation.Shear.Resolution')
-		val.sim_deform = val.simple_def_mode
-	elif val.simple_def_mode == 'both':
-		val.sim_rate_list = u.get('SimpleDeformation.both.DeformRate[]')
-		val.sim_deform_max = u.get('SimpleDeformation.both.MaxDeformation')
-		val.sim_resolution = u.get('SimpleDeformation.both.Resolution')
-	# Cyclic Deformation
-	tmp = []
-	val.cyc_deform_max = []
-	val.cyc_repeat = []
-	val.cyc_ratelist = []
-	val.cyc_resolution = []
-	val.cyclic_deform = u.get('CycleDeformation.CyclicDeform')
-	if val.cyclic_deform == 'CyclicStretch':
-		tmp = u.get('CycleDeformation.CyclicStretch.StretchConditions[]')
-	elif val.cyclic_deform == 'CyclicShear':
-		tmp = u.get('CycleDeformation.CyclicShear.ShearConditions[]')
-	for data in tmp:
-		val.cyc_deform_max.append(data[0])
-		val.cyc_repeat.append(data[1])
-		val.cyc_ratelist.append(data[2])
-		val.cyc_resolution.append(data[3])
-	if val.simple_def_mode == 'none' and val.cyclic_deform == 'none':
-		sys.exit('No proper condition is selected.\nBye!')
+	# Deformation mode
+	val.deform_mode  = u.get('DeformationMode.Deformation')
+	# SweepConditions
+	val.sweep_mode = u.get('Dynamics.SweepMode')
+	if val.sweep_mode == 'StrainSweep':
+		val.StrainSweepConditions = u.get('Dynamics.StrainSweep.StrainSweepConditions[]')
+	elif val.sweep_mode == 'FrequencySweep':
+		val.FrequencySweepConditions = u.get('Dynamics.FrequencySweep.FrequencySweepConditions[]')
+	# SimulationParameters
+	val.cycles = u.get('SimulationParameters.Cycles')
+	val.output_per_cycle = u.get('SimulationParameters.Output_per_Cycle')
+	# AnalysisParameters
+	val.skipcycles = u.get('AnalysisParameters.SkipCycles')
 	return
 # 
 def init_calc():
 	text = "################################################" + "\n"
 	text += "Cores used for simulation\t\t" + str(val.core ) + "\n"
 	text += "################################################" + "\n"
-	if val.simple_def_mode != 'none':
-		text += "Deform mode:\t\t\t\t" + str(val.simple_def_mode) + "\n"
-		text += "Deform Rate:\t\t" + ', '.join(["{0:4.0e}".format(x) for x in val.sim_rate_list]) + "\n"
-		text += "Maximum Strain:\t\t\t\t" + str(val.sim_deform_max) + "\n"
-		text += "Resolution:\t\t\t\t" + str(round(val.sim_resolution,4)) + "\n"
-		text += "################################################" + "\n"
-	if val.cyclic_deform != 'none':
-		text += "Deform mode:\t\t\t" + str(val.cyclic_deform) + "\n"
-		for i in range(len(val.cyc_deform_max)):
-			text += 'Cyclic condition #' + str(i) + '\n'
-			text += "\tMaximum Strain:\t\t\t" + str(val.cyc_deform_max[i]) + "\n"
-			text += "\tRepeat:\t\t\t\t" + str(val.cyc_repeat[i]) + "\n"
-			text += "\tCyclic Deform Rate:\t" + ', '.join(["{0:4.0e}".format(x) for x in val.cyc_ratelist[i]]) + "\n"
-			text += "\tResolution:\t\t\t" + str(round(val.cyc_resolution[i], 4)) + "\n"
-		text += "################################################" + "\n"
+	text += "Deform mode:\t\t\t\t" + str(val.deform_mode) + "\n"
+	text += "################################################" + "\n"
+	if val.sweep_mode == 'StrainSweep':
+		text += "Sweep mode:\t\t\t" + str(val.sweep_mode) + "\n"
+		for data in val.StrainSweepConditions:
+			text += 'temperature:\t\t\t\t' + str(data[0]) + '\n'
+			text += "Minimum Strain:\t\t\t\t" + str(data[1]) + "\n"
+			text += "Maximum Strain:\t\t\t\t" + str(data[2]) + "\n"
+			text += "Frequency:\t\t\t\t" + str(data[3]) + "\n"
+			text += "Data per Digit:\t\t\t\t" + str(data[4]) + "\n"
+	elif val.sweep_mode == 'FrequencySweep':
+		text += "Sweep mode:\t\t\t" + str(val.sweep_mode) + "\n"
+		for data in val.FrequencySweepConditions:
+			text += 'temperature:\t\t\t\t' + str(data[0]) + '\n'
+			text += "Minimum Frequency:\t\t\t" + str(data[1]) + "\n"
+			text += "Maximum Frequency:\t\t\t" + str(data[2]) + "\n"
+			text += "Strain:\t\t\t\t\t" + str(data[3]) + "\n"
+			text += "Data per Digit:\t\t\t\t" + str(data[4]) + "\n"
+	text += "################################################" + "\n"
+	text += 'SimulationParameters:\n'
+	text += "\tCycles:\t\t\t\t" + str(val.cycles) + "\n"
+	text += "\tOutput_per_Cycle:\t\t" + str(val.output_per_cycle) + "\n"
+	text += 'AnalysisParameters:\n'
+	text += "\tSkip Cycles:\t\t\t" + str(val.skipcycles) + "\n"
+	text += "################################################" + "\n"
 	print(text)
 	return
 
@@ -271,86 +208,61 @@ def init_calc():
 
 
 
+def setup_base():
+	if val.sweep_mode == 'StrainSweep':
+		mode = val.sweep_mode
+		for data in val.StrainSweepConditions:
+			val.temperature = data[0]
+			val.min_strain = data[1]
+			val.max_strain = data[2]
+			val.frequency = data[3]
+			val.job_dir.append(mode + '_from_'+ '{:.3g}'.format(val.min_strain).replace('.', '_') + '_to_' +  '{:.3g}'.format(val.max_strain).replace('.', '_') + '_Freq_' + '{:.3g}'.format(val.frequency).replace('.', '_') + '_Temp_' + '{:.2g}'.format(val.temperature)).replace('.', '_')
+	elif val.sweep_mode == 'FrequencySweep':
+		mode = val.sweep_mode
+		for data in val.FrequencySweepConditions:
+			val.temperature = data[0]
+			val.min_freq = data[1]
+			val.max_freq = data[2]
+			val.strain = data[3]
+			val.job_dir.append(mode + '_from_' + '{:.2e}'.format(val.min_freq).replace('.', '_') + '_to_' + '{:.2e}'.format(val.max_freq).replace('.', '_')  + '_Strain_' + '{:.2e}'.format(val.strain).replace('.', '_')  + '_Temp_' + '{:.1e}'.format(val.temperature).replace('.', '_'))
+	print(val.job_dir)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def Setup(target_udf, base_udf, Setting):
+	# if Method == "Freq_Sweep":
+	# 	job_dir = Method + '_from_' + str(int(100000*Freq_Base*Range[0]*Resol[0])/100000).replace('.', '_') + '_to_' + str(int(100000*Freq_Base*Range[-1]*Resol[-1])/100000).replace('.', '_') + "_Strain_" + str(Str_Base).replace('.', '_')
+	# elif Method == "Str_Sweep":
+	# 	job_dir = Method + '_from_' + str(int(100000*Str_Base*Range[0]*Resol[0])/100000).replace('.', '_') + '_to_' + str(int(100000*Str_Base*Range[-1]*Resol[-1])/100000).replace('.', '_') + "_Freq_" + str(Freq_Base).replace('.', '_')
+	# summary_fname = 'Result.txt'
+	# #
+	# if os.path.exists(job_dir):
+	# 	print(u"計算用のディレクトリーが既に存在します。")
+	# 	sys.exit(1)
+	# else:
+	# 	os.mkdir(job_dir)
+	# #
+	# summary = open(os.path.join(job_dir, summary_fname),"w")
+	# summary.write("# analysis of dynamic viscoelasticity\n")
+	# summary.write("# file_name\tstrain_amplitude\tfrequency\tfitting_error\tdelta\tsigma_0\tomega\tG'\tG''\ttan_d\n\n")
+	# #
+	# shutil.copy(target_udf, job_dir)
+	# udf = UDFManager(target_udf)
+	# rec_len = udf.totalRecord() - 1
+	# udf.eraseRecord(record_pos=0, record_num=udf.totalRecord()-1)
+	# udf.put([target_udf, rec_len], 'Initial_Structure.Read_Set_of_Molecules')
+	# loc = "Initial_Structure.Generate_Method"
+	# udf.put("Restart", loc + ".Method")
+	# udf.put([target_udf, rec_len, 1, 0], loc + ".Restart")
+	# udf.put(0, "Initial_Structure.Relaxation.Relaxation")
+	# udf.write(os.path.join(job_dir, base_udf))
+	# # print info
+	# print("###########################################################")
+	# print("read Structure from: ", target_udf)
+	# print("Calculation Directory Created:", job_dir)
+	# print("summary file created:", summary_fname)
+	# print("###########################################################")
+	# # print("script file created: ", script_fname)
+	# print("\n%10s  %10s  %8s  %10s  %8s  %s" % ("freq", "strain", "dt", "total_step", "interval", "fname"))
 	#
-	Method = Setting["Method"]
-	Freq_Base = Setting["Freq_Base"]
-	Str_Base = Setting["Str_Base"]
-	Range = Setting["Range"]
-	Resol = Setting["Resol"]
-	#
-	if Method == "Freq_Sweep":
-		job_dir = Method + '_from_' + str(int(100000*Freq_Base*Range[0]*Resol[0])/100000).replace('.', '_') + '_to_' + str(int(100000*Freq_Base*Range[-1]*Resol[-1])/100000).replace('.', '_') + "_Strain_" + str(Str_Base).replace('.', '_')
-	elif Method == "Str_Sweep":
-		job_dir = Method + '_from_' + str(int(100000*Str_Base*Range[0]*Resol[0])/100000).replace('.', '_') + '_to_' + str(int(100000*Str_Base*Range[-1]*Resol[-1])/100000).replace('.', '_') + "_Freq_" + str(Freq_Base).replace('.', '_')
-	summary_fname = 'Result.txt'
-	#
-	if os.path.exists(job_dir):
-		print(u"計算用のディレクトリーが既に存在します。")
-		sys.exit(1)
-	else:
-		os.mkdir(job_dir)
-	#
-	summary = open(os.path.join(job_dir, summary_fname),"w")
-	summary.write("# analysis of dynamic viscoelasticity\n")
-	summary.write("# file_name\tstrain_amplitude\tfrequency\tfitting_error\tdelta\tsigma_0\tomega\tG'\tG''\ttan_d\n\n")
-	#
-	shutil.copy(target_udf, job_dir)
-	udf = UDFManager(target_udf)
-	rec_len = udf.totalRecord() - 1
-	udf.eraseRecord(record_pos=0, record_num=udf.totalRecord()-1)
-	udf.put([target_udf, rec_len], 'Initial_Structure.Read_Set_of_Molecules')
-	loc = "Initial_Structure.Generate_Method"
-	udf.put("Restart", loc + ".Method")
-	udf.put([target_udf, rec_len, 1, 0], loc + ".Restart")
-	udf.put(0, "Initial_Structure.Relaxation.Relaxation")
-	udf.write(os.path.join(job_dir, base_udf))
-	# print info
-	print("###########################################################")
-	print("read Structure from: ", target_udf)
-	print("Calculation Directory Created:", job_dir)
-	print("summary file created:", summary_fname)
-	print("###########################################################")
-	# print("script file created: ", script_fname)
-	print("\n%10s  %10s  %8s  %10s  %8s  %s" % ("freq", "strain", "dt", "total_step", "interval", "fname"))
-	#
-	return summary_fname, job_dir
+	return
 #
 def Make_Series_Calc(Setting, Parameters, summary_fname, base_udf, job_dir):
 	#
