@@ -36,6 +36,7 @@ def read_all():
 	read_sim_cond()
 	return
 
+
 def read_arg():
 	parser = argparse.ArgumentParser(description='Select udf file to read !')
 	parser.add_argument('udf', help="udf file name to read previous simulation")
@@ -108,19 +109,19 @@ def make_newudf():
 	\end{def}	
 
 	\\begin{data}
-		CalcConditions:{"cognac112",1}
+		CalcConditions:{"cognac112",2}
 		DeformationMode:{"Shear"}
 		Dynamics:{
 		"FrequencySweep",
 		{
-		[{1.0000000,1.e-2,10.000000,1.0000000,5}{1.5000000,1.e-2,10.000000,1.0000000,5}]
+		[{1.0000000,9.9999998e-03,1.0000000,1.0000000,5}]
 		}
 		{
-		[{1.0000000,1.e-2,1.0000000,1.e-2,5}{1.5000000,1.e-2,1.0000000,1.e-2,5}]
+		[{1.0000000,9.9999998e-03,1.0000000,9.9999998e-03,5}{1.2000000,9.9999998e-03,1.0000000,9.9999998e-03,5}]
 		}
 		}
-		SymulationParameters:{20,20}
-		AnalysisParameters:{10}
+		SimulationParameters:{25,20}
+		AnalysisParameters:{5}
 	\end{data}
 	'''
 	###
@@ -173,26 +174,28 @@ def read_condition():
 # 
 def init_calc():
 	text = "################################################" + "\n"
-	text += "Cores used for simulation\t\t" + str(val.core ) + "\n"
+	text += f"Cores used for simulation\t\t{val.core:.2g}\n"
 	text += "################################################" + "\n"
 	text += "Deform mode:\t\t\t\t" + str(val.deform_mode) + "\n"
 	text += "################################################" + "\n"
 	if val.sweep_mode == 'StrainSweep':
 		text += "Sweep mode:\t\t\t" + str(val.sweep_mode) + "\n"
-		for data in val.StrainSweepConditions:
+		for i, data in enumerate(val.StrainSweepConditions):
+			text += '# ' + str(i) +'\n'
 			text += 'temperature:\t\t\t\t' + str(data[0]) + '\n'
-			text += "Minimum Strain:\t\t\t\t" + str(data[1]) + "\n"
+			text += "Minimum Strain:\t\t\t\t" + '{:.2e}'.format(data[1]) + "\n"
 			text += "Maximum Strain:\t\t\t\t" + str(data[2]) + "\n"
 			text += "Frequency:\t\t\t\t" + str(data[3]) + "\n"
 			text += "Data per Digit:\t\t\t\t" + str(data[4]) + "\n"
 	elif val.sweep_mode == 'FrequencySweep':
 		text += "Sweep mode:\t\t\t" + str(val.sweep_mode) + "\n"
-		for data in val.FrequencySweepConditions:
-			text += 'temperature:\t\t\t\t' + str(data[0]) + '\n'
-			text += "Minimum Frequency:\t\t\t" + str(data[1]) + "\n"
-			text += "Maximum Frequency:\t\t\t" + str(data[2]) + "\n"
-			text += "Strain:\t\t\t\t\t" + str(data[3]) + "\n"
-			text += "Data per Digit:\t\t\t\t" + str(data[4]) + "\n"
+		for i, data in enumerate(val.FrequencySweepConditions):
+			text += '# ' + str(i) +'\n'
+			text += f'temperature:\t\t\t\t{data[0]:.4g}\n'
+			text += "Minimum Frequency:\t\t\t" + '{:.4g}'.format(data[1]) + "\n"
+			text += "Maximum Frequency:\t\t\t" + '{:.4g}'.format(data[2]) + "\n"
+			text += "Strain:\t\t\t\t\t" + '{:.4g}'.format(data[3]) + "\n"
+			text += "Data per Digit:\t\t\t\t" + '{:.4g}'.format(data[4]) + "\n"
 	text += "################################################" + "\n"
 	text += 'SimulationParameters:\n'
 	text += "\tCycles:\t\t\t\t" + str(val.cycles) + "\n"
