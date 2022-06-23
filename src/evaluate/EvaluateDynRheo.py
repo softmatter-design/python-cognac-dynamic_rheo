@@ -6,11 +6,13 @@
 #                     2007/9/01   J. Takimoto
 #                     2016/4/18   H.Sasaki
 ######################################################
+from UDFManager import *
 import numpy
+import argparse
 from math import sin, cos, tan, pi, sqrt
 import os
-import gnuplot2
-from time import sleep
+import platform
+import subprocess
 
 import evaluate.values as val
 #========== parameters ======================================================
@@ -24,11 +26,151 @@ max_iter = 1000000
 #####################
 #
 def evaluate_all():
-	print('kk')
+	read_arg()
+	read_and_calc()
+	save_ss()
+	plot_ss()
+
 	return
 
 
 #---- initialize
+
+# Read argument 
+def read_arg():
+	parser = argparse.ArgumentParser(description='Evaluate deformed simulations !')
+	parser.add_argument('udf', help="UDF file name to evaluate")
+	parser.add_argument('-s', '--skip', help="Skip time to ignore ss data")
+
+	args = parser.parse_args()
+	if args.udf:
+		val.read_udf = args.udf
+		val.def_mode = args.udf.split('_')[0].lower()
+		val.base_name = val.read_udf.split('.')[0]
+	else:
+		print('\n#####\nUDF file is not specified')
+		print('Set UDF file name!')
+	if args.skip:
+		val.skip = args.skip
+	else:
+		print('\n#####\nSkip time is not set!')
+		sys.exit('all data will be evaluated !')
+	return
+
+
+
+
+
+############################
+# Calculate stress either for shear or stretch deformation
+def read_and_calc():
+	print("Readin file = ", val.read_udf)
+	uobj = UDFManager(val.read_udf)
+	#
+	uobj.jump(0)
+	cell = uobj.get("Structure.Unit_Cell.Cell_Size")
+	area_init = cell[0]*cell[1]
+	z_init = cell[2]
+	for i in range(1, uobj.totalRecord()):
+		uobj.jump(i)
+		print("Reading Rec.=", i)
+		time = uobj.get('Time')
+		if val.def_mode == 'shear':
+			stress = uobj.get('Statistics_Data.Stress.Total.Batch_Average.xy')
+			strain = uobj.get('Structure.Unit_Cell.Shear_Strain')
+		elif val.def_mode == 'stretch':
+			cell = uobj.get("Structure.Unit_Cell.Cell_Size")
+			stress_list = uobj.get("Statistics_Data.Stress.Total.Batch_Average")
+			stress = (cell[0]*cell[1])*(stress_list[2]-(stress_list[0] + stress_list[1])/2.)/area_init
+			strain = uobj.get("Structure.Unit_Cell.Cell_Size.c")/z_init
+		val.ss_data.append([time, str(strain), stress])
+	return
+
+
+########################################
+# 計算結果をターゲットファイル名で保存
+def save_ss():
+	val.f_name = val.base_name + '_ss.dat'
+	with open(val.f_name, 'w') as f:
+		f.write('# Time\tStrain\tStress\n\n')
+		for line in val.ss_data:
+			f.write(f'{line[0]:}\t{line[1]:}\t{line[2]}\n')
+		f.write('\n\n#\n')
+		f.write('# Time\tStrain\tStress\n\n')
+		for line in val.ss_data:
+			if float(line[0]) > float(val.skip):
+				f.write(f'{line[0]:}\t{line[1]:}\t{line[2]}\n')
+	return
+
+
+############################
+# 結果をプロット
+def plot_ss():
+	script_content()
+	with open(val.base_name + '_plot_ss.plt', 'w') as f:
+		f.write(val.script)
+	#
+	if platform.system() == "Windows":
+		subprocess.call([val.base_name + '_plot_ss.plt'], shell=True)
+	elif platform.system() == "Linux":
+		subprocess.call(['gnuplot ' + val.base_name + '_plot_ss.plt'], shell=True)
+	return
+
+
+# スクリプトの中身
+def script_content():
+	val.script = 'set term pngcairo font "Arial,14"\n'
+	val.script += '#set mono\nset colorsequence classic\n\n'
+	val.script += f'data = "{val.f_name}"\n'
+	val.script += 'set output "lissajous.png"\n\n'
+	val.script += 'set key left\nset size square\n'
+	val.script += '#set xrange [1:3]\n#set yrange [0.:]\n#set xtics 0.5\n#set ytics 0.01\n'
+	val.script += 'set xlabel "Strain"\nset ylabel "Stress"\n\n'
+	val.script += 'plot '
+	val.script += 'data ind 0 u 2:3 w l lw 2 lt 1 noti'
+	val.script += '\n\nreset\n\n'
+	val.script += 'set term pngcairo font "Arial,14"\n'
+	val.script += '#set mono\nset colorsequence classic\n\n'
+	val.script += f'data = "{val.f_name}"\n'
+	val.script += 'set output "time_stress.png"\n\n'
+	val.script += 'set key left\nset size square\n'
+	val.script += '#set xrange [1:3]\n#set yrange [0.:]\n#set xtics 0.5\n#set ytics 0.01\n'
+	val.script += 'set xlabel "Time"\nset ylabel "Stress"\n\n'
+	val.script += 'plot '
+	val.script += 'data ind 0 u 1:3 w l lw 2 lt 1 noti'
+	val.script += '\n\nreset'
+	val.script += 'set term pngcairo font "Arial,14"\n'
+	val.script += '#set mono\nset colorsequence classic\n\n'
+	val.script += f'data = "{val.f_name}"\n'
+	val.script += 'set output "skipped_lissajous.png"\n\n'
+	val.script += 'set key left\nset size square\n'
+	val.script += '#set xrange [1:3]\n#set yrange [0.:]\n#set xtics 0.5\n#set ytics 0.01\n'
+	val.script += 'set xlabel "Strain"\nset ylabel "Stress"\n\n'
+	val.script += 'plot '
+	val.script += 'data ind 1 u 2:3 w l lw 2 lt 1 noti'
+	val.script += '\n\nreset\n\n'
+	val.script += 'set term pngcairo font "Arial,14"\n\n'
+	val.script += '#set mono\nset colorsequence classic\n\n'
+	val.script += f'data = "{val.f_name}"\n'
+	val.script += 'set output "skipped_time_stress.png"\n\n'
+	val.script += 'set key left\nset size square\n'
+	val.script += '#set xrange [1:3]\n#set yrange [0.:]\n#set xtics 0.5\n#set ytics 0.01\n'
+	val.script += 'set xlabel "Time"\nset ylabel "Stress"\n\n'
+	val.script += 'plot '
+	val.script += 'data ind 1 u 1:3 w l lw 2 lt 1 noti'
+	val.script += '\n\nreset'
+	return
+
+
+
+
+
+
+
+
+
+
+
 
 def _initialize(udf, verbose=0):
 	global uobj, num_data, dt,interval, amp, freq, N, num_cycles, dphi

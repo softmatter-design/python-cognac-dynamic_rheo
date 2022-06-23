@@ -1,4 +1,4 @@
-# Values used for 
+# Values
 
 # 使用するCognacのバージョン
 ver_Cognac = "cognac112"
@@ -6,25 +6,12 @@ ver_Cognac = "cognac112"
 core = 1
 
 read_udf = ''
-# deform_mode
-deform_mode = ""
-# sweep_mode
+deform_mode = ''
 sweep_mode = ''
-StrainSweepConditions = []
-FrequencySweepConditions = []
-temperature = 0.
-min_freq = 0.
-max_freq = 0.
-frequency = 0.
-min_strain = 0.
-max_strain = 0.
-strain = 0.
-data_per_digit = 5
-freq_list = []
-strain_list = []
-
+Conditions = []
 base_dir = ''
-dir_name = ''
+base_udf = 'base_out.udf'
+Sim_conditions = []
 target_dir = ''
 subdir_list = []
 
@@ -34,9 +21,11 @@ total_cycles = 25
 output_cycle = 20
 # 
 skipcycles = 5
-# １サイクル当たりのステップ数の最小値 int(output_per_cycle*5)
-step_min = 100
+# １サイクル当たりのステップ数の最小値 
+step_min = int(output_cycle*5)
 # シミュレーション時の最大 time step
 dt_max = 0.01
-#
 time = []
+
+batch = ''
+restart_udf = ''

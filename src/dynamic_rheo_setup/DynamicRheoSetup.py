@@ -8,7 +8,6 @@ import argparse
 import codecs
 import os
 import platform
-import shutil
 import sys
 
 import dynamic_rheo_setup.values as val
@@ -20,13 +19,6 @@ def setup():
 	read_all()
 	# セットアップ
 	setup_all()
-
-	# make_udfs()
-	# summary_fname, job_dir = Setup(target_udf, base_udf, Setting)
-	# #
-	# Make_Series_Calc(Setting, Parameters, summary_fname, base_udf, job_dir)
-
-
 ################################################################################
 
 ################################################################################
@@ -165,9 +157,9 @@ def read_condition():
 	# SweepConditions
 	val.sweep_mode = u.get('Dynamics.SweepMode')
 	if val.sweep_mode == 'StrainSweep':
-		val.StrainSweepConditions = u.get('Dynamics.StrainSweep.StrainSweepConditions[]')
+		val.Conditions = u.get('Dynamics.StrainSweep.StrainSweepConditions[]')
 	elif val.sweep_mode == 'FrequencySweep':
-		val.FrequencySweepConditions = u.get('Dynamics.FrequencySweep.FrequencySweepConditions[]')
+		val.Conditions = u.get('Dynamics.FrequencySweep.FrequencySweepConditions[]')
 	# SimulationParameters
 	val.total_cycles = u.get('SymulationParameters.Cycles')
 	val.output_cycle = u.get('SymulationParameters.Output_per_Cycle')
@@ -184,7 +176,7 @@ def init_calc():
 	text += "################################################\n"
 	if val.sweep_mode == 'StrainSweep':
 		text += f"Sweep mode:\t\t\t{val.sweep_mode}\n"
-		for i, data in enumerate(val.StrainSweepConditions):
+		for i, data in enumerate(val.Conditions):
 			text += f'# {i}\n'
 			text += f"temperature:\t\t\t\t{data[0]:.4g}\n"
 			text += f"Minimum Strain:\t\t\t\t{data[1]:.4g}\n"
@@ -193,7 +185,7 @@ def init_calc():
 			text += f"Data per Digit:\t\t\t\t{data[4]:.4g}\n"
 	elif val.sweep_mode == 'FrequencySweep':
 		text += "Sweep mode:\t\t\t" + str(val.sweep_mode) + "\n"
-		for i, data in enumerate(val.FrequencySweepConditions):
+		for i, data in enumerate(val.Conditions):
 			text += f'# {i}\n'
 			text += f'  temperature:\t\t\t\t{data[0]:.2g}\n'
 			text += f"  Minimum Frequency:\t\t\t{data[1]:.4g}\n"
@@ -213,36 +205,31 @@ def init_calc():
 
 
 
-
-
+#####################################
+# 
 def setup_all():
-	val.base_dir = f"DynamicRheo_{val.deform_mode:}_Read_{val.read_udf.split('.')[0]:}"
-	if val.sweep_mode == 'StrainSweep':
-		for data in val.StrainSweepConditions:
-			[val.temperature, val.min_strain, val.max_strain, val.frequency, val.data_per_digit] = data
-			val.dir_name = f'{val.deform_mode:}_{val.sweep_mode:}_from_{val.min_strain:.3g}_to_{val.max_strain:.3g}_Freq_{val.frequency:.3g}_Temp_{val.temperature:.3g}'.replace('.', '_')
-			val.subdir_list.append(val.dir_name)
-			val.target_dir = os.path.join(val.base_dir, val.dir_name)
-
-			val.strain_list = make_series(val.min_strain, val.max_strain, val.data_per_digit)
-			val.freq_list = [val.frequency]
-
-			setup_udfs()
-
-	elif val.sweep_mode == 'FrequencySweep':
-		for data in val.FrequencySweepConditions:
-			[val.temperature, val.min_freq, val.max_freq, val.strain, val.data_per_digit] = data
-			val.dir_name = f'{val.deform_mode:}_{val.sweep_mode:}_from_{val.min_freq:.3g}_to_{val.max_freq:.3g}_Strain_{val.strain:.3g}_Temp_{val.temperature:.3g}'.replace('.', '_')
-			val.subdir_list.append(val.dir_name)
-			val.target_dir = os.path.join(val.base_dir, val.dir_name)
-
-			val.freq_list = make_series(val.min_freq, val.max_freq, val.data_per_digit)
-			val.strain_list = [val.strain]
-
-			setup_udfs()
+	set_simcond()
+	make_udfs()
 	return
 
-
+def set_simcond():
+	val.base_dir = f"DynamicRheo_{val.deform_mode:}_Read_{val.read_udf.split('.')[0]:}"
+	for data in val.Conditions:
+		if val.sweep_mode == 'StrainSweep':
+			[temperature, min_strain, max_strain, frequency, data_per_digit] = data
+			dir_name = f'{val.deform_mode:}_{val.sweep_mode:}_from_{min_strain:.3g}_to_{max_strain:.3g}_Freq_{frequency:.3g}_Temp_{temperature:.3g}'.replace('.', '_')
+			#
+			freq_list = [frequency]
+			strain_list = make_series(min_strain, max_strain, data_per_digit)
+		elif val.sweep_mode == 'FrequencySweep':
+			[temperature, min_freq, max_freq, strain, data_per_digit] = data
+			dir_name = f'{val.deform_mode:}_{val.sweep_mode:}_from_{min_freq:.3g}_to_{max_freq:.3g}_Strain_{strain:.3g}_Temp_{temperature:.3g}'.replace('.', '_')
+			#
+			freq_list = make_series(min_freq, max_freq, data_per_digit)
+			strain_list = [strain]
+		val.Sim_conditions.append([dir_name, freq_list, strain_list, temperature])
+		val.subdir_list.append(dir_name)
+	return
 
 def make_series(min, max, per_digit):
 	series = []
@@ -255,26 +242,30 @@ def make_series(min, max, per_digit):
 	return series
 
 
-def setup_udfs():
-	make_dir()
+def make_udfs():
+	for list in val.Sim_conditions:
+		val.restart_udf = val.base_udf
+		[dir_name, freq_list, strain_list, temperature] = list
+		val.target_dir = os.path.join(val.base_dir, dir_name)
+		make_dir()
+		set_base()
+		val.batch = "#!/bin/bash\n"
+		for freq in freq_list:
+			for strain in strain_list:
+				job_id = f'{val.deform_mode}_Freq_{freq:}_Strain_{strain:}'.replace('.', '_')
+				in_fname  = job_id + '_uin.udf'
+				out_fname = job_id + '_out.udf'
+				log_fname = job_id + '.log'
 
-	summary_fname = 'Result.txt'
-	summary = "# analysis of dynamic viscoelasticity\n"
-	summary += f"# read Structure from: {val.read_udf}"
-	summary += "# file_name\tstrain_amplitude\tfrequency\tfitting_error\tdelta\tsigma_0\tomega\tG'\tG''\ttan_d\n\n"
-	with open(os.path.join(val.target_dir, summary_fname), "w") as f:
-		f.write(summary)
+				time_setup(freq)
+				create_in_udf(in_fname, strain, freq, temperature)
 
-	udf = UDFManager(val.read_udf)
-	udf.eraseRecord(record_pos=0, record_num=udf.totalRecord()-1)
-	udf.put(['', -1], 'Initial_Structure.Read_Set_of_Molecules')
-	loc = "Initial_Structure.Generate_Method"
-	udf.put("Restart", loc + ".Method")
-	udf.put(['', -1, 1, 0], loc + ".Restart")
-	udf.put(0, "Initial_Structure.Relaxation.Relaxation")
-	udf.write(os.path.join(val.target_dir, 'base_uin.udf'))
-	
-	make_udfs()
+				skip = round(val.skipcycles*val.output_cycle*val.time[0]*val.time[2])
+				val.batch += f'{val.ver_Cognac:} -I {in_fname:} -O {out_fname:} -n {val.core:} > {log_fname:}\n'
+				val.batch += f'evaluate_dr {out_fname} -s {skip:.3g}\n'
+				make_batch()
+				# val.restart_udf = out_fname
+	batch_series()
 	return
 
 def make_dir():
@@ -285,50 +276,18 @@ def make_dir():
 		os.makedirs(val.target_dir)
 	return
 
-def make_udfs():
+def set_base():
+	summary_fname = 'Result.txt'
+	summary = "# analysis of dynamic viscoelasticity\n"
+	summary += f"# read Structure from: {val.read_udf}\n"
+	summary += "# strain\tfrequency\tfitting_error\tdelta\tsigma_0\tomega\tG'\tG''\ttan_d\n\n"
+	with open(os.path.join(val.target_dir, summary_fname), "w") as f:
+		f.write(summary)
 
-	for i, freq in enumerate(val.freq_list):
-		for j, strain in enumerate(val.strain_list):
-			val.batch = "#!/bin/bash\n"
-
-			job_id = f'Freq_{freq:}_Strain_{strain:}'.replace('.', '_')
-			in_fname  = job_id + '_uin.udf'
-			out_fname = job_id + '_out.udf'
-			log_fname = job_id + '.log'
-
-			time_setup(freq)
-
-			# print(in_fname, out_fname, log_fname)
-
-
-
-			# set_cyclic_dir()
-			# make_cycle_batch(id)
-			# バッチファイルを作成
-			f_batch = os.path.join(val.target_dir, '_calc.bat')
-			with open(f_batch, 'w') as f:
-				f.write(val.batch)
-			if platform.system() == "Linux":
-				os.chmod(f_batch, 0o777)
-	batch_series()
-
-	# 		bat.write(cognac_v + ' -I ' + in_fname + ' -O ' + out_fname + ' -n ' + str(core) +
-	# 			' > ' + log_fname + '\n')
-	# 		bat.write('python ' + py_fname + ' ' + out_fname +
-	# 			' >> ' + summary_fname + '\n')
-
-
-
-	# 		print("%10.5f  %10.5f  %8.5f  %10d  %8d  %s" %(freq, strain, dt, total_step, interval, in_fname))
-
-	# 		create_in_udf(job_dir, base_udf, in_fname, strain, freq, dt, total_step, interval)
-	# #
-	# shutil.copy(py_fname, job_dir)
-
-	# bat = open(os.path.join(job_dir, '_Run.bat'), "w")
-
-
-
+	udf = UDFManager(val.read_udf)
+	udf.eraseRecord(record_pos=0, record_num=udf.totalRecord()-1)
+	udf.write(os.path.join(val.target_dir, val.base_udf))
+	return
 
 def time_setup(freq):
 	freq = round(float(freq), 3)
@@ -337,13 +296,13 @@ def time_setup(freq):
 	dt = min(val.dt_max, 1.0/(freq*val.step_min))
 	step_per_cycle = 1.0/(freq*dt)
 	# 2) 整数値で、intervalを決める。
-	interval = max(1, int(round(step_per_cycle/val.output_cycle, -1))) 
+	interval = max(1, round(step_per_cycle/val.output_cycle))
 	# 3) 整数値 interval を用いて、step_per_cycle と dt を決める。
 	dt = round(1.0/(freq*interval*val.output_cycle), 4)
-	tmp = 1.0/(interval*dt*freq) # 0.025  400
-	N = int(round(tmp))
+	tmp = 1.0/(interval*dt*freq) 
+	N = round(tmp)
 	if abs(tmp - N) > 1e-5:
-		interval = max(1, int(round((step_per_cycle/val.output_cycle)*10., -1)))
+		interval = max(1, round((step_per_cycle/val.output_cycle)*10.))
 		dt = round(1.0/(freq*interval*val.output_cycle), 4)
 	# print(1.0/(interval*dt*freq))
 	step_per_cycle = interval*val.output_cycle
@@ -352,33 +311,45 @@ def time_setup(freq):
 	val.time = [dt, total_step, interval]
 	return
 
-
-
-
-
-
-
-
 # create input UDF file
-def create_in_udf(job_dir, base_udf, in_fname, strain, freq, dt, total_step, interval):
+def create_in_udf(in_fname, strain, freq, temperature):
+	uobj = UDFManager(os.path.join(val.target_dir, val.base_udf))
+	uobj.put([val.restart_udf, -1], 'Initial_Structure.Read_Set_of_Molecules')
+	loc = "Initial_Structure.Generate_Method"
+	uobj.put("Restart", loc + ".Method")
+	uobj.put([val.restart_udf, -1, 1, 0], loc + ".Restart")
+	uobj.put(0, "Initial_Structure.Relaxation.Relaxation")
 
-	uobj = UDFManager(os.path.join(job_dir, base_udf))
-	loc = "Simulation_Conditions.Dynamics_Conditions.Deformation"
-	uobj.put("Lees_Edwards", loc + ".Method")
-	uobj.put("Dynamic",    loc + ".Lees_Edwards.Method")
-	uobj.put([strain, freq], loc + ".Lees_Edwards.Dynamic")
+	if val.deform_mode == 'Shear':
+		loc = "Simulation_Conditions.Dynamics_Conditions.Deformation"
+		uobj.put("Lees_Edwards", loc + ".Method")
+		uobj.put("Dynamic",    loc + ".Lees_Edwards.Method")
+		uobj.put([float(strain), float(freq)], loc + ".Lees_Edwards.Dynamic")
+	elif val.deform_mode == 'Stretch':
+		loc = "Simulation_Conditions.Dynamics_Conditions.Deformation"
+		uobj.put("Cell_Deformation", loc + ".Method")
+		uobj.put("Oscillation",    loc + ".Cell_Deformation.Method")
+		uobj.put([float(strain), float(freq), 0.5], loc + ".Cell_Deformation.Oscillation")
+		uobj.put(1, loc + ".Cell_Deformation.Interval_of_Deform")
+		uobj.put(0, loc + ".Cell_Deformation.Deform_Atom")
 
-	loc = "Simulation_Conditions.Dynamics_Conditions.Time"
-	uobj.put([dt, total_step, interval], loc)
+	loc = "Simulation_Conditions.Dynamics_Conditions"
+	uobj.put(val.time, loc + '.Time')
+	uobj.put(float(temperature), loc + '.Temperature.Temperature')
 
-	uobj.write(os.path.join(job_dir, in_fname))
-
-
-
-
+	uobj.write(os.path.join(val.target_dir, in_fname))
+	return
 
 #######################################################################
 # ファイル名を設定し、バッチファイルを作成
+def make_batch():
+	f_batch = os.path.join(val.target_dir, '_calc.bat')
+	with open(f_batch, 'w') as f:
+		f.write(val.batch)
+	if platform.system() == "Linux":
+		os.chmod(f_batch, 0o777)
+	return
+
 def batch_series():
 	batch_series = "#!/bin/bash\n"
 	for subdir in val.subdir_list:
