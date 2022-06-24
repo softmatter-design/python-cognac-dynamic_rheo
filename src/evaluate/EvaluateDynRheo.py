@@ -1,36 +1,26 @@
 #!/usr/bin/env python
-######################################################
-#    Python script for analysis of dynamic rheology
-#    from Cognac Calculations
-#                     2007/2/20   H. Kodama, H. Sasaki
-#                     2007/9/01   J. Takimoto
-#                     2016/4/18   H.Sasaki
-######################################################
+# -*- coding: utf-8 -*-
+###### Modules #################################################################
 from UDFManager import *
-import numpy
+from scipy.optimize import curve_fit
+
+import numpy as np
 import argparse
-from math import sin, cos, tan, pi, sqrt
 import os
 import platform
 import subprocess
+import sys
 
 import evaluate.values as val
-#========== parameters ======================================================
-# number of cycles to be omitted from the analysis
-skip_cycles = 10
-# make this smaller for higher accuracy
-epsilon = 0.001
-# maximum number of iteration
-max_iter = 1000000
-
 #####################
-#
+# Main
 def evaluate_all():
 	read_arg()
 	read_and_calc()
-	save_ss()
+	fit_save()
+	# save_ss()
 	plot_ss()
-
+	
 	return
 
 
@@ -41,6 +31,8 @@ def read_arg():
 	parser = argparse.ArgumentParser(description='Evaluate deformed simulations !')
 	parser.add_argument('udf', help="UDF file name to evaluate")
 	parser.add_argument('-s', '--skip', help="Skip time to ignore ss data")
+	parser.add_argument('-f', '--freq', help="Frequency used for simulation")
+	parser.add_argument('-a', '--amp', help="Amplitude of deform used for simulation")
 
 	args = parser.parse_args()
 	if args.udf:
@@ -49,12 +41,18 @@ def read_arg():
 		val.base_name = val.read_udf.split('.')[0]
 	else:
 		print('\n#####\nUDF file is not specified')
-		print('Set UDF file name!')
+		sys.exit('Set UDF file name!')
 	if args.skip:
 		val.skip = args.skip
 	else:
 		print('\n#####\nSkip time is not set!')
-		sys.exit('all data will be evaluated !')
+		print('all data will be evaluated !')
+	if args.freq and args.amp:
+		val.freq = args.freq
+		val.amp = args.amp
+	else:
+		print('\n#####\nFrequency and/or Amplitude are not set!')
+		sys.exit('Input proper data !')
 	return
 
 
@@ -75,6 +73,7 @@ def read_and_calc():
 		uobj.jump(i)
 		print("Reading Rec.=", i)
 		time = uobj.get('Time')
+		omega_t = round(2*np.pi*float(val.freq)*float(time), 5)
 		if val.def_mode == 'shear':
 			stress = uobj.get('Statistics_Data.Stress.Total.Batch_Average.xy')
 			strain = uobj.get('Structure.Unit_Cell.Shear_Strain')
@@ -83,24 +82,27 @@ def read_and_calc():
 			stress_list = uobj.get("Statistics_Data.Stress.Total.Batch_Average")
 			stress = (cell[0]*cell[1])*(stress_list[2]-(stress_list[0] + stress_list[1])/2.)/area_init
 			strain = uobj.get("Structure.Unit_Cell.Cell_Size.c")/z_init
-		val.ss_data.append([time, str(strain), stress])
+		val.ss_data.append([time, omega_t, str(strain), stress])
 	return
 
 
-########################################
-# 計算結果をターゲットファイル名で保存
-def save_ss():
-	val.f_name = val.base_name + '_ss.dat'
-	with open(val.f_name, 'w') as f:
-		f.write('# Time\tStrain\tStress\n\n')
-		for line in val.ss_data:
-			f.write(f'{line[0]:}\t{line[1]:}\t{line[2]}\n')
-		f.write('\n\n#\n')
-		f.write('# Time\tStrain\tStress\n\n')
-		for line in val.ss_data:
-			if float(line[0]) > float(val.skip):
-				f.write(f'{line[0]:}\t{line[1]:}\t{line[2]}\n')
-	return
+# ########################################
+# # 計算結果をターゲットファイル名で保存
+# def save_ss():
+# 	val.f_name = val.base_name + '_ss.dat'
+# 	with open(val.f_name, 'w') as f:
+# 		f.write('# Time\tomega_t\tStrain\tStress\n\n')
+# 		for line in val.ss_data:
+# 			f.write(f'{line[0]:}\t{line[1]:}\t{line[2]}\t{line[3]}\n')
+# 		cnt = 1
+# 		while cnt*float(val.skip) < float(val.ss_data[-1][0]):
+# 			f.write('\n\n#\n')
+# 			f.write('# Time\tomega_t\tStrain\tStress\n\n')
+# 			for line in val.ss_data:
+# 				if float(line[0]) >= cnt*float(val.skip):
+# 					f.write(f'{line[0]:}\t{line[1]:}\t{line[2]}\t{line[3]}\n')
+# 			cnt += 1
+# 	return
 
 
 ############################
@@ -122,44 +124,93 @@ def script_content():
 	val.script = 'set term pngcairo font "Arial,14"\n'
 	val.script += '#set mono\nset colorsequence classic\n\n'
 	val.script += f'data = "{val.f_name}"\n'
-	val.script += 'set output "lissajous.png"\n\n'
+	val.script += f'set output "{val.base_name}_lissajous.png"\n\n'
 	val.script += 'set key left\nset size square\n'
 	val.script += '#set xrange [1:3]\n#set yrange [0.:]\n#set xtics 0.5\n#set ytics 0.01\n'
 	val.script += 'set xlabel "Strain"\nset ylabel "Stress"\n\n'
 	val.script += 'plot '
-	val.script += 'data ind 0 u 2:3 w l lw 2 lt 1 noti'
+	val.script += 'data ind 0 u 3:4 w l lw 2 lt 1 ti "all" ,\\\n'
+	val.script += 'data ind 1 u 3:4 w l lw 2 lt 2 ti "skip=1" ,\\\n'
+	val.script += 'data ind 2 u 3:4 w l lw 2 lt 3 ti "skip=2" ,\\\n'
+	val.script += 'data ind 3 u 3:4 w l lw 2 lt 4 ti "skip=3" ,\\\n'
+	val.script += 'data ind 0 u 3:5 w l lw 4 lt 5 ti "Fitted"'
 	val.script += '\n\nreset\n\n'
 	val.script += 'set term pngcairo font "Arial,14"\n'
 	val.script += '#set mono\nset colorsequence classic\n\n'
 	val.script += f'data = "{val.f_name}"\n'
-	val.script += 'set output "time_stress.png"\n\n'
+	val.script += f'set output "{val.base_name}_time_stress.png"\n\n'
 	val.script += 'set key left\nset size square\n'
 	val.script += '#set xrange [1:3]\n#set yrange [0.:]\n#set xtics 0.5\n#set ytics 0.01\n'
-	val.script += 'set xlabel "Time"\nset ylabel "Stress"\n\n'
+	val.script += 'set xlabel "{/Symbol w}t"\nset ylabel "Stress"\n\n'
+	val.script += 'sigma0=0.1\ndelta=1.\n'
+	val.script += 'f(x) = sigma0*sin(x + delta)\n'
+	val.script += 'fit f(x) data u 1:3 via sigma0, delta\n\n'
 	val.script += 'plot '
-	val.script += 'data ind 0 u 1:3 w l lw 2 lt 1 noti'
-	val.script += '\n\nreset'
-	val.script += 'set term pngcairo font "Arial,14"\n'
-	val.script += '#set mono\nset colorsequence classic\n\n'
-	val.script += f'data = "{val.f_name}"\n'
-	val.script += 'set output "skipped_lissajous.png"\n\n'
-	val.script += 'set key left\nset size square\n'
-	val.script += '#set xrange [1:3]\n#set yrange [0.:]\n#set xtics 0.5\n#set ytics 0.01\n'
-	val.script += 'set xlabel "Strain"\nset ylabel "Stress"\n\n'
-	val.script += 'plot '
-	val.script += 'data ind 1 u 2:3 w l lw 2 lt 1 noti'
-	val.script += '\n\nreset\n\n'
-	val.script += 'set term pngcairo font "Arial,14"\n\n'
-	val.script += '#set mono\nset colorsequence classic\n\n'
-	val.script += f'data = "{val.f_name}"\n'
-	val.script += 'set output "skipped_time_stress.png"\n\n'
-	val.script += 'set key left\nset size square\n'
-	val.script += '#set xrange [1:3]\n#set yrange [0.:]\n#set xtics 0.5\n#set ytics 0.01\n'
-	val.script += 'set xlabel "Time"\nset ylabel "Stress"\n\n'
-	val.script += 'plot '
-	val.script += 'data ind 1 u 1:3 w l lw 2 lt 1 noti'
+	val.script += 'data ind 0 u 2:4 w l lw 2 lt 1 ti "all" ,\\\n'
+	val.script += 'data ind 1 u 2:4 w l lw 2 lt 2 ti "skip=1" ,\\\n'
+	val.script += 'data ind 2 u 2:4 w l lw 2 lt 3 ti "skip=2" ,\\\n'
+	val.script += 'data ind 3 u 2:4 w l lw 2 lt 4 ti "skip=3",\\\n'
+	val.script += 'data ind 0 u 2:5 w l lw 1 lt 5 ti "Fitted"'
 	val.script += '\n\nreset'
 	return
+
+
+
+
+def fit_save():
+	omega_t = []
+	sigma_we = []
+	for data in val.ss_data:
+		if float(data[0]) >= float(val.skip):
+			omega_t.append(float(data[1]))
+			sigma_we.append(data[3])
+	g_sigma0 = 0.5
+	g_delta = 0.5
+	guess = [g_sigma0, g_delta]
+	popt, perr = fit_rheo(omega_t, sigma_we, guess)
+	#
+	f_sigma0, f_delta = popt
+	error_sigma0, error_delta = perr
+	omega = 2*np.pi*float(val.freq)
+	g_prime = f_sigma0/float(val.amp)*np.cos(float(f_delta))
+	g_dprime = f_sigma0/float(val.amp)*np.sin(float(f_delta))
+	tan_d = np.tan(f_delta)
+	with open('Result.txt', 'a') as f:
+		f.write(f'{val.amp:}\t{val.freq:}\t{f_sigma0:.4g}\t{error_sigma0:.2e}\t{f_delta:.4g}\t{error_delta:.2e}\t{omega:.4g}\t{g_prime:.4g}\t{g_dprime:.4g}\t{tan_d:.4g}\n')
+	#
+	val.f_name = val.base_name + '_fitted_ss.dat'
+	with open(val.f_name, 'w') as f:
+		f.write('# Time\tomega_t\tStrain\tStress\tFitted Stress\n\n')
+		for line in val.ss_data:
+			f.write(f'{line[0]:}\t{line[1]:}\t{line[2]}\t{line[3]}\t{f_sigma0*np.sin(float(line[1]) + f_delta)}\n')
+		cnt = 1
+		while cnt*float(val.skip) < float(val.ss_data[-1][0]):
+			f.write('\n\n#\n')
+			f.write('# Time\tomega_t\tStrain\tStress\tFitted Stress\n\n')
+			for line in val.ss_data:
+				if float(line[0]) >= cnt*float(val.skip):
+					f.write(f'{line[0]:}\t{line[1]:}\t{line[2]}\t{line[3]}\t{f_sigma0*np.sin(float(line[1]) + f_delta)}\n')
+			cnt += 1
+	return
+
+def func(omega_t, sigma0, delta):
+	sigma = sigma0*np.sin(omega_t + delta)
+	return sigma
+
+def fit_rheo(omega_t, sigma_we, guess):
+	popt, pcov = curve_fit(func, np.array(omega_t), np.array(sigma_we), p0 = guess)
+	perr = np.sqrt(np.diag(pcov))
+	return popt, perr
+
+
+
+
+
+
+
+
+
+
 
 
 

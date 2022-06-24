@@ -3,6 +3,8 @@ read_udf = ''
 def_mode = ''
 base_name = ''
 skip = 0
+freq = 1.
+amp = 1.
 
 ss_data = []
 

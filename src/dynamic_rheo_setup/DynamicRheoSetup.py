@@ -109,10 +109,10 @@ def make_newudf():
 		Dynamics:{
 		"FrequencySweep",
 		{
-		[{1.0000000,9.9999998e-03,1.0000000,1.0000000,5}]
+		[{1.00,1.0e-02,1.00,1.0,5}]
 		}
 		{
-		[{1.0000000,9.9999998e-03,1.0000000,9.9999998e-03,5}{1.2000000,9.9999998e-03,1.0000000,9.9999998e-03,5}]
+		[{1.0,1.0e-02,1.0,1.0e-01,5}{1.20,1.0e-02,1.00,1.0e-02,5}]
 		}
 		}
 		SimulationParameters:{25,20}
@@ -219,22 +219,22 @@ def set_simcond():
 			[temperature, min_strain, max_strain, frequency, data_per_digit] = data
 			dir_name = f'{val.deform_mode:}_{val.sweep_mode:}_from_{min_strain:.3g}_to_{max_strain:.3g}_Freq_{frequency:.3g}_Temp_{temperature:.3g}'.replace('.', '_')
 			#
-			freq_list = [frequency]
+			freq_list = [f'{frequency:.3g}']
 			strain_list = make_series(min_strain, max_strain, data_per_digit)
 		elif val.sweep_mode == 'FrequencySweep':
 			[temperature, min_freq, max_freq, strain, data_per_digit] = data
 			dir_name = f'{val.deform_mode:}_{val.sweep_mode:}_from_{min_freq:.3g}_to_{max_freq:.3g}_Strain_{strain:.3g}_Temp_{temperature:.3g}'.replace('.', '_')
 			#
 			freq_list = make_series(min_freq, max_freq, data_per_digit)
-			strain_list = [strain]
+			strain_list = [f'{strain:.3g}']
 		val.Sim_conditions.append([dir_name, freq_list, strain_list, temperature])
 		val.subdir_list.append(dir_name)
 	return
 
 def make_series(min, max, per_digit):
 	series = []
-	data = min
-	while data < max:
+	data = round(min, 3)
+	while data < round(max, 3):
 		for i in range(per_digit):
 			series.append(f'{data*10.**float(i/per_digit):.3g}')
 		data *= 10
@@ -262,7 +262,7 @@ def make_udfs():
 
 				skip = round(val.skipcycles*val.output_cycle*val.time[0]*val.time[2])
 				val.batch += f'{val.ver_Cognac:} -I {in_fname:} -O {out_fname:} -n {val.core:} > {log_fname:}\n'
-				val.batch += f'evaluate_dr {out_fname} -s {skip:.3g}\n'
+				val.batch += f'evaluate_dr {out_fname} -s {skip:.3g} -f {freq:} -a {strain:}\n'
 				make_batch()
 				# val.restart_udf = out_fname
 	batch_series()
@@ -280,7 +280,8 @@ def set_base():
 	summary_fname = 'Result.txt'
 	summary = "# analysis of dynamic viscoelasticity\n"
 	summary += f"# read Structure from: {val.read_udf}\n"
-	summary += "# strain\tfrequency\tfitting_error\tdelta\tsigma_0\tomega\tG'\tG''\ttan_d\n\n"
+	summary += "# strain\tfreq\tsigma_0\terror\tdelta\error\tomega\tG'\tG''\ttan_d\n\n"
+
 	with open(os.path.join(val.target_dir, summary_fname), "w") as f:
 		f.write(summary)
 
