@@ -44,7 +44,6 @@ def read_arg():
 			sys.exit('\nSelected udf of ', args.udf, ' seems not exist !\nbye now!!')
 		else:
 			val.read_udf = args.udf
-			# print('Selected udf file is ' + val.read_udf)
 	else:
 		print('no udf file is selected')
 		sys.exit('select proper udf file to read.')
@@ -58,8 +57,7 @@ def read_sim_cond():
 		print('Please, modify and save it !\n')
 		make_newudf()
 		input('Press ENTER to continue...')
-	else:
-		read_and_set()
+	read_and_set()
 	return
 
 # make new udf when not found.
@@ -77,6 +75,8 @@ def make_newudf():
 			SweepMode:select{"none", "StrainSweep", "FrequencySweep"} "Sweep モードを選択",
 				StrainSweep:{
 					StrainSweepConditions[]:{
+						Equilibration:select{"none", "Equilib"}
+						Equilib_Time:{delta_T: double, Total_Steps: int, Output_Interval_Steps: int} "時間条件を入力"
 						Temperature:float "",
 						MinStrain:float "最小ひずみ",
 						MaxStrain:float "最大ひずみ",
@@ -86,6 +86,8 @@ def make_newudf():
 					}
 				FrequencySweep:{
 					FrequencySweepConditions[]:{
+						Equilibration:select{"none", "Equilib"}
+						Equilib_Time:{delta_T: double, Total_Steps: int, Output_Interval_Steps: int} "時間条件を入力"
 						Temperature:float "",
 						MinFrequency:float "最小周波数",
 						MaxFrequency:float "最大周波数",
@@ -94,7 +96,7 @@ def make_newudf():
 						}
 					}
 			} "計算ターゲットの条件を設定"		
-		SimulationParameters:{
+		SymulationParameters:{
 			Cycles:int "",
 			Output_per_Cycle:int "",
 			} "シミュレーション条件を設定"
@@ -104,18 +106,18 @@ def make_newudf():
 	\end{def}	
 
 	\\begin{data}
-		CalcConditions:{"cognac112",2}
+		CalcConditions:{"cognac112",1}
 		DeformationMode:{"Shear"}
 		Dynamics:{
 		"FrequencySweep",
 		{
-		[{1.00,1.0e-02,1.00,1.0,5}]
+		[{"none",{1.0e-02,100000,1000}1.00,0.100,1.0,0.100,3}{"Equilib",{1.00e-02,100000,1000}1.200,0.10,1.000,0.100,3}]
 		}
 		{
-		[{1.0,1.0e-02,1.0,1.0e-01,5}{1.20,1.0e-02,1.00,1.0e-02,5}]
+		[{"none",{1.0e-02,100000,1000}1.0,1.00e-02,1.0,0.10,3}{"Equilib",{1.000e-02,100000,1000}1.2000000,1.00e-02,1.0000000,0.1000,3}]
 		}
 		}
-		SimulationParameters:{25,20}
+		SymulationParameters:{15,20}
 		AnalysisParameters:{5}
 	\end{data}
 	'''
@@ -160,10 +162,11 @@ def read_condition():
 		val.Conditions = u.get('Dynamics.StrainSweep.StrainSweepConditions[]')
 	elif val.sweep_mode == 'FrequencySweep':
 		val.Conditions = u.get('Dynamics.FrequencySweep.FrequencySweepConditions[]')
+	# print(val.Conditions)
 	# SimulationParameters
 	val.total_cycles = u.get('SymulationParameters.Cycles')
 	val.output_cycle = u.get('SymulationParameters.Output_per_Cycle')
-	print(val.total_cycles, val.output_cycle)
+	# print(val.total_cycles, val.output_cycle)
 	# AnalysisParameters
 	val.skipcycles = u.get('AnalysisParameters.SkipCycles')
 	return
@@ -178,20 +181,24 @@ def init_calc():
 		text += f"Sweep mode:\t\t\t{val.sweep_mode}\n"
 		for i, data in enumerate(val.Conditions):
 			text += f'# {i}\n'
-			text += f"temperature:\t\t\t\t{data[0]:.4g}\n"
-			text += f"Minimum Strain:\t\t\t\t{data[1]:.4g}\n"
-			text += f"Maximum Strain:\t\t\t\t{data[2]:.4g}\n"
-			text += f"Frequency:\t\t\t\t{data[3]:.4g}\n"
-			text += f"Data per Digit:\t\t\t\t{data[4]:.4g}\n"
+			if data[0] == 'Equilib':
+				text += f'Equilibration is set:\t\t{data[1]:}\n'
+			text += f"temperature:\t\t\t\t{data[2]:.4g}\n"
+			text += f"Minimum Strain:\t\t\t\t{data[3]:.4g}\n"
+			text += f"Maximum Strain:\t\t\t\t{data[4]:.4g}\n"
+			text += f"Frequency:\t\t\t\t{data[5]:.4g}\n"
+			text += f"Data per Digit:\t\t\t\t{data[6]:.4g}\n"
 	elif val.sweep_mode == 'FrequencySweep':
 		text += "Sweep mode:\t\t\t" + str(val.sweep_mode) + "\n"
 		for i, data in enumerate(val.Conditions):
 			text += f'# {i}\n'
-			text += f'  temperature:\t\t\t\t{data[0]:.2g}\n'
-			text += f"  Minimum Frequency:\t\t\t{data[1]:.4g}\n"
-			text += f"  Maximum Frequency:\t\t\t{data[2]:.4g}\n"
-			text += f"  Strain:\t\t\t\t{data[3]:.4g}\n"
-			text += f"  Data per Digit:\t\t\t{data[4]:.4g}\n"
+			if data[0] == 'Equilib':
+				text += f'Equilibration time:\t\t{data[1]:}\n'
+			text += f'  temperature:\t\t\t\t{data[2]:.4g}\n'
+			text += f"  Minimum Frequency:\t\t\t{data[3]:.4g}\n"
+			text += f"  Maximum Frequency:\t\t\t{data[4]:.4g}\n"
+			text += f"  Strain:\t\t\t\t{data[5]:.4g}\n"
+			text += f"  Data per Digit:\t\t\t{data[6]:.4g}\n"
 	text += "################################################\n"
 	text += 'Simulation Parameters:\n'
 	text += f"  Cycles:\t\t\t\t{val.total_cycles:}\n"
@@ -201,8 +208,6 @@ def init_calc():
 	text += "################################################\n"
 	print(text)
 	return
-
-
 
 
 #####################################
@@ -216,18 +221,18 @@ def set_simcond():
 	val.base_dir = f"DynamicRheo_{val.deform_mode:}_Read_{val.read_udf.split('.')[0]:}"
 	for data in val.Conditions:
 		if val.sweep_mode == 'StrainSweep':
-			[temperature, min_strain, max_strain, frequency, data_per_digit] = data
+			[equib, eq_time, temperature, min_strain, max_strain, frequency, data_per_digit] = data
 			dir_name = f'{val.deform_mode:}_{val.sweep_mode:}_from_{min_strain:.3g}_to_{max_strain:.3g}_Freq_{frequency:.3g}_Temp_{temperature:.3g}'.replace('.', '_')
 			#
 			freq_list = [f'{frequency:.3g}']
 			strain_list = make_series(min_strain, max_strain, data_per_digit)
 		elif val.sweep_mode == 'FrequencySweep':
-			[temperature, min_freq, max_freq, strain, data_per_digit] = data
+			[equib, eq_time, temperature, min_freq, max_freq, strain, data_per_digit] = data
 			dir_name = f'{val.deform_mode:}_{val.sweep_mode:}_from_{min_freq:.3g}_to_{max_freq:.3g}_Strain_{strain:.3g}_Temp_{temperature:.3g}'.replace('.', '_')
 			#
 			freq_list = make_series(min_freq, max_freq, data_per_digit)
 			strain_list = [f'{strain:.3g}']
-		val.Sim_conditions.append([dir_name, freq_list, strain_list, temperature])
+		val.Sim_conditions.append([dir_name, freq_list, strain_list, temperature, equib, eq_time])
 		val.subdir_list.append(dir_name)
 	return
 
@@ -245,11 +250,15 @@ def make_series(min, max, per_digit):
 def make_udfs():
 	for list in val.Sim_conditions:
 		val.restart_udf = val.base_udf
-		[dir_name, freq_list, strain_list, temperature] = list
+		[dir_name, freq_list, strain_list, temperature, equib, eq_time] = list
 		val.target_dir = os.path.join(val.base_dir, dir_name)
 		make_dir()
 		set_base()
 		val.batch = "#!/bin/bash\n"
+		#
+		if equib == 'Equilib':
+			set_equilib_udf(eq_time, temperature)
+		#
 		for freq in freq_list:
 			for strain in strain_list:
 				job_id = f'{val.deform_mode}_Freq_{freq:}_Strain_{strain:}'.replace('.', '_')
@@ -265,7 +274,7 @@ def make_udfs():
 				val.batch += f'evaluate_dr {out_fname} -s {skip:.3g} -f {freq:} -a {strain:}\n'
 				make_batch()
 				# val.restart_udf = out_fname
-	batch_series()
+	make_batch_series()
 	return
 
 def make_dir():
@@ -281,13 +290,27 @@ def set_base():
 	summary = "# analysis of dynamic viscoelasticity\n"
 	summary += f"# read Structure from: {val.read_udf}\n"
 	summary += "# strain\tfreq\tsigma_0\terror\tdelta\error\tomega\tG'\tG''\ttan_d\n\n"
-
 	with open(os.path.join(val.target_dir, summary_fname), "w") as f:
 		f.write(summary)
+	#
+	uobj= UDFManager(val.read_udf)
+	uobj.eraseRecord(record_pos=0, record_num=uobj.totalRecord()-1)
+	uobj.put([val.restart_udf, -1], 'Initial_Structure.Read_Set_of_Molecules')
+	loc = "Initial_Structure.Generate_Method"
+	uobj.put("Restart", loc + ".Method")
+	uobj.put([val.restart_udf, -1, 1, 0], loc + ".Restart")
+	uobj.put(0, "Initial_Structure.Relaxation.Relaxation")
+	uobj.write(os.path.join(val.target_dir, val.base_udf))
+	return
 
-	udf = UDFManager(val.read_udf)
-	udf.eraseRecord(record_pos=0, record_num=udf.totalRecord()-1)
-	udf.write(os.path.join(val.target_dir, val.base_udf))
+def set_equilib_udf(eq_time, temperature):
+	uobj= UDFManager(os.path.join(val.target_dir, val.base_udf))
+	loc= "Simulation_Conditions.Dynamics_Conditions"
+	uobj.put(list(eq_time), loc + '.Time')
+	uobj.put(float(temperature), loc + '.Temperature.Temperature')
+	uobj.write(os.path.join(val.target_dir, 'equilib_uin.udf'))
+	val.batch += f'{val.ver_Cognac:} -I equilib_uin.udf -O equilib_out.udf -n {val.core:} \n'
+	val.restart_udf = 'equilib_out.udf'
 	return
 
 def time_setup(freq):
@@ -351,7 +374,7 @@ def make_batch():
 		os.chmod(f_batch, 0o777)
 	return
 
-def batch_series():
+def make_batch_series():
 	batch_series = "#!/bin/bash\n"
 	for subdir in val.subdir_list:
 		if platform.system() == "Windows":
