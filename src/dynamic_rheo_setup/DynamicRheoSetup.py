@@ -269,11 +269,10 @@ def make_udfs():
 				time_setup(freq)
 				create_in_udf(in_fname, strain, freq, temperature)
 
-				skip = round(val.skipcycles*val.output_cycle*val.time[0]*val.time[2])
+				skip = round(val.skipcycles*val.output_cycle*val.time[0]*val.time[2], 2)
 				val.batch += f'{val.ver_Cognac:} -I {in_fname:} -O {out_fname:} -n {val.core:} > {log_fname:}\n'
-				val.batch += f'evaluate_dr {out_fname} -s {skip:.3g} -f {freq:} -a {strain:}\n'
+				val.batch += f'evaluate_dr {out_fname} -s {skip:.2f} -f {freq:} -a {strain:}\n'
 				make_batch()
-				# val.restart_udf = out_fname
 	make_batch_series()
 	return
 

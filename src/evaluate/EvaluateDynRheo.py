@@ -185,6 +185,7 @@ def fit_save():
 			f.write(f'{line[0]:}\t{line[1]:}\t{line[2]}\t{line[3]}\t{f_sigma0*np.sin(float(line[1]) + f_delta)}\n')
 		cnt = 1
 		while cnt*float(val.skip) < float(val.ss_data[-1][0]):
+			print(cnt*float(val.skip), float(val.ss_data[-1][0]))
 			f.write('\n\n#\n')
 			f.write('# Time\tomega_t\tStrain\tStress\tFitted Stress\n\n')
 			for line in val.ss_data:
